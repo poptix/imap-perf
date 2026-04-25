@@ -305,17 +305,20 @@ def run_suite(args):
     uid_sample = []
 
     searches = [
-        ("ALL",                      "SEARCH ALL"),
-        ("UNSEEN",                   "SEARCH UNSEEN"),
-        ("SEEN",                     "SEARCH SEEN"),
-        ("FLAGGED",                  "SEARCH FLAGGED"),
-        ("SINCE 1-Jan-2020",         "SEARCH SINCE 1-Jan-2020"),
-        ("BEFORE 1-Jan-2030",        "SEARCH BEFORE 1-Jan-2030"),
-        ("TEXT imap-perf",           "SEARCH TEXT imap-perf"),
-        ("BODY imap-perf",           "SEARCH BODY imap-perf"),
-        ("SUBJECT test",             "SEARCH SUBJECT test"),
+        ("ALL",              "SEARCH ALL",              False),
+        ("UNSEEN",           "SEARCH UNSEEN",           False),
+        ("SEEN",             "SEARCH SEEN",             False),
+        ("FLAGGED",          "SEARCH FLAGGED",          False),
+        ("SINCE 1-Jan-2020", "SEARCH SINCE 1-Jan-2020", False),
+        ("BEFORE 1-Jan-2030","SEARCH BEFORE 1-Jan-2030",False),
+        ("SUBJECT test",     "SEARCH SUBJECT test",     False),
+        ("TEXT imap-perf",   "SEARCH TEXT imap-perf",   True),
+        ("BODY imap-perf",   "SEARCH BODY imap-perf",   True),
     ]
-    for label, criterion in searches:
+    for label, criterion, full_text in searches:
+        if full_text and not args.full_text_search:
+            info(f"  (skipped) SEARCH {label}  — use --full-text-search to enable")
+            continue
         try:
             parts = criterion.split(" ", 1)
             samples = test_search(imap, *parts[1:], label=label, repeat=repeat)
@@ -411,6 +414,8 @@ def parse_args():
                    help="Repeat each command N times for averaging")
     p.add_argument("--fetch-count",     type=int, default=10, dest="fetch_count",
                    help="Number of messages to use in FETCH tests")
+    p.add_argument("--full-text-search", action="store_true", dest="full_text_search",
+                   help="Include SEARCH TEXT and SEARCH BODY (expensive — pegs server CPU)")
     p.add_argument("--full-body",       action="store_true",
                    help="Include full RFC822 body fetch (can be large)")
     p.add_argument("--write-test",      action="store_true",
