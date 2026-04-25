@@ -42,6 +42,8 @@ def run_timed(fn, *args, repeat=1):
 # ── display helpers ───────────────────────────────────────────────────────────
 
 COL_W = 42
+_results: list = []   # [(label, avg_ms_or_None, n, status_str)]
+
 
 def header(title):
     print(f"\n{'─' * 70}")
@@ -63,12 +65,38 @@ def row(label, samples, extra=""):
 
 def ok(label, samples, extra=""):
     row(f"[OK]  {label}", samples, extra)
+    _results.append((label, mean(samples), len(samples), "ok"))
 
 def fail(label, err):
     print(f"  {'[FAIL]':<6} {label:<{COL_W}} {err}")
+    _results.append((label, None, 0, f"FAIL: {err}"))
 
 def info(msg):
     print(f"  {msg}")
+
+
+def print_csv_summary(host, port, tls):
+    import csv, os
+    ts        = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    meta_cols = ["timestamp", "host", "port", "tls"]
+    cmd_cols  = [label for label, *_ in _results]
+    row_data  = [ts, host, port, tls] + [
+        f"{avg:.3f}" if avg is not None else "FAIL"
+        for _, avg, _, _ in _results
+    ]
+
+    filename   = f"{host}.csv"
+    write_hdr  = not os.path.exists(filename)
+
+    with open(filename, "a", newline="") as f:
+        w = csv.writer(f)
+        if write_hdr:
+            w.writerow(meta_cols + cmd_cols)
+        w.writerow(row_data)
+
+    print(f"\n{'─' * 70}")
+    print(f"  CSV → {filename}  ({'header + ' if write_hdr else ''}1 row appended)")
+    print(f"{'─' * 70}")
 
 
 # ── connection ────────────────────────────────────────────────────────────────
@@ -194,15 +222,14 @@ def test_append_expunge(imap, mailbox):
     ).encode()
 
     with Timer() as t_append:
-        typ, data = imap.append(mailbox, r"(\Seen)", now, msg)
+        typ, data = imap.append(mailbox, r"(\Seen \Deleted)", now, msg)
     if typ != "OK":
         return None, None, f"APPEND failed: {data}"
 
-    # Mark it deleted then expunge
-    # Find the UID we just appended via SEARCH
-    typ2, uids = imap.search(None, "SUBJECT", "[imap-perf] probe message")
-    if typ2 == "OK" and uids[0]:
-        imap.store(uids[0].decode().replace(" ", ","), "+FLAGS", r"(\Deleted)")
+    # Message was appended with \Deleted already set; just expunge.
+    # Use "*" (last message) as a fallback store in case the server
+    # ignored the flag on APPEND.
+    imap.store("*", "+FLAGS", r"(\Deleted)")
 
     with Timer() as t_expunge:
         imap.expunge()
@@ -218,6 +245,8 @@ def test_noop(imap, repeat):
 # ── main test suite ───────────────────────────────────────────────────────────
 
 def run_suite(args):
+    global _results
+    _results = []
     repeat   = args.repeat
     n_fetch  = args.fetch_count
 
@@ -357,6 +386,7 @@ def run_suite(args):
     except Exception:
         pass
 
+    print_csv_summary(args.host, args.port, args.tls)
     print()
 
 
