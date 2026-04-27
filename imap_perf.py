@@ -71,6 +71,10 @@ def fail(label, err):
     print(f"  {'[FAIL]':<6} {label:<{COL_W}} {err}")
     _results.append((label, None, 0, f"FAIL: {err}"))
 
+def skip(label, hint=""):
+    print(f"  {'(skip)':<6} {label:<{COL_W}}" + (f"  {hint}" if hint else ""))
+    _results.append((label, None, 0, "skip"))
+
 def info(msg):
     print(f"  {msg}")
 
@@ -81,8 +85,8 @@ def print_csv_summary(host, port, tls):
     meta_cols = ["timestamp", "host", "port", "tls"]
     cmd_cols  = [label for label, *_ in _results]
     row_data  = [ts, host, port, tls] + [
-        f"{avg:.3f}" if avg is not None else "FAIL"
-        for _, avg, _, _ in _results
+        "" if status == "skip" else (f"{avg:.3f}" if avg is not None else "FAIL")
+        for _, avg, _, status in _results
     ]
 
     filename   = f"{host}.csv"
@@ -317,7 +321,7 @@ def run_suite(args):
     ]
     for label, criterion, full_text in searches:
         if full_text and not args.full_text_search:
-            info(f"  (skipped) SEARCH {label}  — use --full-text-search to enable")
+            skip(label, "use --full-text-search to enable")
             continue
         try:
             parts = criterion.split(" ", 1)
@@ -350,7 +354,7 @@ def run_suite(args):
         ]
         for label, fn, is_heavy in tests:
             if is_heavy and not args.full_body:
-                info(f"  (skipped) {label}  — use --full-body to enable")
+                skip(label, "use --full-body to enable")
                 continue
             try:
                 samples = fn(imap, uid_sample, repeat)
@@ -372,7 +376,8 @@ def run_suite(args):
         except Exception as e:
             fail("APPEND/EXPUNGE", e)
     else:
-        info("\n  Write path skipped — use --write-test to enable APPEND/EXPUNGE.")
+        skip("APPEND (write new message)", "use --write-test to enable")
+        skip("EXPUNGE (delete + compact)", "use --write-test to enable")
 
     # ── Done ──────────────────────────────────────────────────────────────────
     header("Teardown")
